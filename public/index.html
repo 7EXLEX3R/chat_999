@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
+        <title>chat_999</title>
+        <style>
+            * { box-sizing: border-box; }
+            body {
+                background: #030303;
+                color: #eee;
+                font-family: monospace;
+                padding: 0;
+                margin: 0;
+            }
+            #output {
+                white-space: pre-wrap;
+                min-height: 90vh;
+            }
+            .input-line {
+                display: inline;
+                outline: none;
+            }
+            .prompt-line { display: block; }
+            .response-line {
+                display: block;
+                color: burlywood;
+            }
+            .spinner { display: inline; }
+        </style>
+    </head>
+    <body>
+        <div id="output"></div>
+        <script>
+            const output = document.getElementById('output');
+            document.body.addEventListener('click', () => [...document.querySelectorAll('.input-line')].pop()?.focus());
+            window.addEventListener('load', () => createPromptLine());
+            async function sendPrompt(prompt, hideUserInput = false) {
+                if (!hideUserInput) {
+                    const promptLine = document.createElement('div');
+                    promptLine.classList.add('prompt-line');
+                    promptLine.textContent = `> ${prompt}`;
+                    output.appendChild(promptLine);
+                }
+                const spinnerLine = document.createElement('div');
+                spinnerLine.classList.add('prompt-line');
+                const spinnerSpan = document.createElement('span');
+                spinnerSpan.className = 'spinner';
+                spinnerLine.appendChild(spinnerSpan);
+                output.appendChild(spinnerLine);
+                let spinnerFrames = ['|', '/', '-', '\\'];
+                let spinnerIndex = 0;
+                let spinnerInterval = setInterval(() => {
+                    spinnerSpan.textContent = spinnerFrames[spinnerIndex++ % spinnerFrames.length];
+                }, 100);
+                try {
+                    const res = await fetch('/chat', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({prompt})
+                    });
+                    if (!res.body || !window.ReadableStream) {
+                        clearInterval(spinnerInterval);
+                        spinnerSpan.textContent = 'error: streaming not supported';
+                        createPromptLine();
+                        return;
+                    }
+                    clearInterval(spinnerInterval);
+                    spinnerLine.innerHTML = '';
+                    const responseLine = document.createElement('div');
+                    responseLine.classList.add('response-line');
+                    output.appendChild(responseLine);
+                    const reader = res.body.getReader();
+                    const decoder = new TextDecoder('utf-8');
+                    let buffer = '';
+                    while (true) {
+                        const {value, done} = await reader.read();
+                        if (done) break;
+                        buffer += decoder.decode(value, {stream: true});
+                        let lines = buffer.split('\n');
+                        buffer = lines.pop();
+                        for (const line of lines) {
+                            if (!line.trim()) continue;
+                            try {
+                                const chunk = JSON.parse(line);
+                                if (chunk?.message?.content) {
+                                    responseLine.textContent += chunk.message.content;
+                                    window.scrollTo(0, document.body.scrollHeight);
+                                }
+                            } catch {}
+                        }
+                    }
+                    output.appendChild(document.createElement('br'));
+                } catch (err) {
+                    clearInterval(spinnerInterval);
+                    spinnerSpan.textContent = 'error: ' + err.message;
+                }
+            }
+            function createPromptLine() {
+                const line = document.createElement('div');
+                line.classList.add('prompt-line');
+                line.innerHTML = `> <span class="input-line" contenteditable="true"></span>`;
+                output.appendChild(line);
+                const inputSpan = line.querySelector('.input-line');
+                setTimeout(() => {
+                    inputSpan.focus();
+                    const range = document.createRange();
+                    const sel = window.getSelection();
+                    range.selectNodeContents(inputSpan);
+                    range.collapse(false);
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                    window.scrollTo(0, document.body.scrollHeight);
+                }, 0);
+                inputSpan.addEventListener('keydown', async (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const prompt = inputSpan.innerText.trim();
+                        if (!prompt) return;
+                        inputSpan.contentEditable = false;
+                        output.appendChild(document.createElement('br'));
+                        await sendPrompt(prompt, true);
+                        createPromptLine();
+                        window.scrollTo(0, document.body.scrollHeight);
+                    }
+                });
+            }
+        </script>
+    </body>
+</html>
