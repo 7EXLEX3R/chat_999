@@ -1,6 +1,6 @@
 ### chat_999
 
-plug-and-play LLM chatbot with system customization and chat history
+plug-and-play LLM chatbot container with system customization and chat history
 
 - minimal Ollama Docker container with auto model pull & LLM chatbot web app on port 80
 - supports chat system / personality customization via `CHAT_999_SYSTEM` env
